@@ -12,14 +12,12 @@
 二是对各门各派的精华的借鉴移植：比如一些大项目的附送基础库： [Netty](https://github.com/netty/netty/)，[ElasticSearch](https://github.com/elastic/elasticsearch)， 一些专业的基础库 ： [Jodd](https://github.com/oblac/jodd/), [commons-io](https://github.com/apache/commons-io), [commons-collections](https://github.com/apache/commons-collections)； 一些大厂的基础库：[Facebook JCommon](https://github.com/facebook/jcommon)，[twitter commons](https://github.com/twitter/commons)
 
 
-具体使用文档请阅读JavaDoc，以及对应的单元测试写法。
-
+具体使用文档请在IDE中阅读JavaDoc，以及对应的单元测试写法。
 
 
 ## 2. Usage
 
-Maven:
-
+Maven : 
 ```
 <dependency>
 	<groupId>com.vip.vjtools</groupId>
@@ -28,7 +26,8 @@ Maven:
 </dependency>
 ```
 
-[Maven Central 下载](http://repo1.maven.org/maven2/com/vip/vjtools/vjkit/1.0.0/)
+Download: [![Maven Central](https://maven-badges.herokuapp.com/maven-central/com.vip.vjtools/vjkit/badge.svg)](http://search.maven.org/#search|gav|1|g:"com.vip.vjtools"%20AND%20a:"vjkit")
+
 
 ## 3. Dependency
 
@@ -39,9 +38,15 @@ Maven:
 |[Guava](https://github.com/google/guava) | 20.0 ||
 |[Apache Common Lang](https://github.com/apache/commons-lang) | 3.7 ||
 |[Slf4j](https://www.slf4j.org) | 1.7.25 ||
-|[Dozer](http://dozermapper.github.io/) | 5.5.1 |Optional for BeanMapper |
+|[Dozer](http://dozermapper.github.io/) | 5.5.1 |Optional for BeanMapper，[选型](https://github.com/vipshop/vjtools/blob/master/vjkit/src/main/java/com/vip/vjtools/vjkit/reflect/BeanMapper.java#L11) |
 
 如果使用Optional的依赖，请参考pom文件在业务项目自行引入
+
+## 4. Sonar Status
+
+[https://sonarcloud.io/dashboard?id=com.vip.vjtools:vjkit](https://sonarcloud.io/dashboard?id=com.vip.vjtools:vjkit)
+
+(sonarcloud use "Sonar Way")
 
 
 

@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.ConsoleHandler;
 import java.util.logging.Handler;
 import java.util.logging.Level;
@@ -24,12 +25,14 @@ import joptsimple.OptionSet;
  *
  */
 public class VJTop {
+
+
 	public static final String VERSION = "1.0.0";
 
 	public static final double DEFAULT_DELAY = 10.0;
 
 	private final static String CLEAR_TERMINAL_ANSI_CMD = new String(
-			new byte[] { (byte) 0x1b, (byte) 0x5b, (byte) 0x32, (byte) 0x4a, (byte) 0x1b, (byte) 0x5b, (byte) 0x48 });
+			new byte[]{(byte) 0x1b, (byte) 0x5b, (byte) 0x32, (byte) 0x4a, (byte) 0x1b, (byte) 0x5b, (byte) 0x48});
 
 	private static Logger logger;
 
@@ -37,19 +40,21 @@ public class VJTop {
 
 	private int maxIterations_ = -1;
 
+	private AtomicBoolean needFurtherInput = new AtomicBoolean(false);
+
 	private static OptionParser createOptionParser() {
 		OptionParser parser = new OptionParser();
 		// commmon
-		parser.acceptsAll(Arrays.asList(new String[] { "help", "?", "h" }), "shows this help").forHelp();
-		parser.acceptsAll(Arrays.asList(new String[] { "n", "iteration" }),
+		parser.acceptsAll(Arrays.asList(new String[]{"help", "?", "h"}), "shows this help").forHelp();
+		parser.acceptsAll(Arrays.asList(new String[]{"n", "iteration"}),
 				"vjtop will exit after n output iterations  (defaults to unlimit)").withRequiredArg()
 				.ofType(Integer.class);
-		parser.acceptsAll(Arrays.asList(new String[] { "d", "delay" }),
+		parser.acceptsAll(Arrays.asList(new String[]{"d", "delay"}),
 				"delay between each output iteration (defaults to 10s)").withRequiredArg().ofType(Double.class);
-		parser.acceptsAll(Arrays.asList(new String[] { "v", "verbose" }), "verbose mode");
-		parser.acceptsAll(Arrays.asList(new String[] { "w", "width" }),
+		parser.acceptsAll(Arrays.asList(new String[]{"v", "verbose"}), "verbose mode");
+		parser.acceptsAll(Arrays.asList(new String[]{"w", "width"}),
 				"Number of columns for the console display (defaults to 100)").withRequiredArg().ofType(Integer.class);
-		parser.acceptsAll(Arrays.asList(new String[] { "l", "limit" }),
+		parser.acceptsAll(Arrays.asList(new String[]{"l", "limit"}),
 				"Number of rows for the console display ( default to 10 threads)").withRequiredArg()
 				.ofType(Integer.class);
 
@@ -120,8 +125,14 @@ public class VJTop {
 				logger.fine("Verbosity mode.");
 			}
 
-			// 5. run
+			// 5. start thread to get user input
+			Thread interactiveThread = new Thread(new InteractiveTask(view, vjtop, Thread.currentThread()));
+			interactiveThread.setDaemon(true);
+			interactiveThread.start();
+
+			// 6. run views
 			vjtop.run(view);
+
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -202,6 +213,7 @@ public class VJTop {
 			while (!view.shouldExit()) {
 
 				if (maxIterations_ > 1 || maxIterations_ == -1) {
+					waitForInput();
 					clearTerminal();
 				}
 
@@ -214,7 +226,7 @@ public class VJTop {
 				}
 
 				++iterations;
-				view.sleep((long) (delay_ * 1000));
+				Utils.sleep((long) (delay_ * 1000));
 			}
 		} catch (NoClassDefFoundError e) {
 			e.printStackTrace(System.err);
@@ -235,6 +247,16 @@ public class VJTop {
 		} else {
 			System.out.print(CLEAR_TERMINAL_ANSI_CMD);
 		}
+	}
+
+	public void waitForInput() {
+		while (needFurtherInput.get()) {
+			Utils.sleep(1000);
+		}
+	}
+
+	public void setNeedForFurtherInput(boolean value) {
+		needFurtherInput.set(value);
 	}
 
 	public void setDelay(Double delay) {

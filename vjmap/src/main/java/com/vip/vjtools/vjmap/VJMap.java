@@ -44,6 +44,11 @@ public class VJMap {
 		resultPrinter.printOldGen(System.out, list, orderByName, minSize);
 	}
 
+	public static void printHeapAddress() {
+		HistogramHeapAccessor accessor = new HistogramHeapAccessor();
+		accessor.printHeapAddress();
+	}
+
 	public static void main(String[] args) {
 		boolean orderByName = false;
 		long minSize = -1;
@@ -81,7 +86,6 @@ public class VJMap {
 		}
 
 		Integer pid = Integer.valueOf(args[1]);
-		System.out.println("PID:" + pid);
 
 		HotSpotAgent agent = new HotSpotAgent();
 
@@ -94,6 +98,11 @@ public class VJMap {
 				runSurvior(minAge, orderByName, minSize);
 			} else if (modeFlag.startsWith("-old")) {
 				runCms(orderByName, minSize);
+			} else if (modeFlag.startsWith("-address")) {
+				printHeapAddress();
+			} else if (modeFlag.startsWith("-version")) {
+				System.out.println("jmap version:1.0.1");
+				return;
 			} else {
 				printHelp();
 				return;
@@ -110,6 +119,7 @@ public class VJMap {
 	private static void printHelp() {
 		int leftLength = "-all:minsize=1024,byname".length();
 		String format = " %-" + leftLength + "s  %s%n";
+
 		System.out.println("vjmap.sh <options> <PID>");
 		System.out.printf(format, "-all", "print all gens histogram, order by total size");
 		System.out.printf(format, "-all:minsize=1024", "print all gens histogram, total size>=1024");
@@ -125,5 +135,6 @@ public class VJMap {
 		System.out.printf(format, "-sur:minage=4", "print survivor histogram, age>=4");
 		System.out.printf(format, "-sur:minsize=1024,byname",
 				"print survivor histogram, age>=3, survivor size>=1024, order by class name");
+		System.out.printf(format, "-address", "print address for all gens");
 	}
 }

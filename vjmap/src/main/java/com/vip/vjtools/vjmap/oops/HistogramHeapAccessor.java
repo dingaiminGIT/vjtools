@@ -1,5 +1,6 @@
 package com.vip.vjtools.vjmap.oops;
 
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -9,6 +10,7 @@ import com.vip.vjtools.vjmap.ClassStats;
 import sun.jvm.hotspot.debugger.Address;
 import sun.jvm.hotspot.debugger.AddressException;
 import sun.jvm.hotspot.debugger.OopHandle;
+import sun.jvm.hotspot.gc_implementation.parallelScavenge.PSOldGen;
 import sun.jvm.hotspot.gc_implementation.parallelScavenge.PSYoungGen;
 import sun.jvm.hotspot.gc_implementation.parallelScavenge.ParallelScavengeHeap;
 import sun.jvm.hotspot.gc_implementation.shared.MutableSpace;
@@ -37,29 +39,42 @@ public class HistogramHeapAccessor {
 	private HashMap<Klass, ClassStats> classStatsMap;
 	private CollectedHeap heap;
 	private ObjectHeap objectHeap;
+	private PrintStream tty;
 
 	public HistogramHeapAccessor() {
 		this.classStatsMap = new HashMap<Klass, ClassStats>(2048, 0.2f);
 		heap = VM.getVM().getUniverse().heap();
 		objectHeap = VM.getVM().getObjectHeap();
+		tty = System.err;
 	}
 
+	/**
+	 * 统计Survivor区对象统计信息
+	 */
 	public List<ClassStats> dumpSurvivor(int minAge) {
+		// 获取Survivor区边界
 		Address fromBottom = null;
 		Address fromTop = null;
 		if (heap instanceof GenCollectedHeap) {
+			//CMS GC
 			DefNewGeneration youngGen = (DefNewGeneration) ((GenCollectedHeap) heap).getGen(0);
-			// Survivor区是连续的，不用处理多个live region
 			ContiguousSpace from = youngGen.from();
 			fromBottom = from.bottom();
 			fromTop = from.top();
+			
+			from.printOn(tty);
+			tty.println("");
 		} else if (heap instanceof ParallelScavengeHeap) {
+			//Parallel GC
 			PSYoungGen psYoung = ((ParallelScavengeHeap) heap).youngGen();
 			MutableSpace from = psYoung.fromSpace();
 			fromBottom = from.bottom();
 			fromTop = from.top();
+			
+			from.printOn(tty);
+			tty.println("");
 		} else {
-			throw new RuntimeException("Unsupport heap:" + heap.getClass().getName());
+			throw new IllegalArgumentException("Only Support CMS and Parallel GC. Unsupport heap:" + heap.getClass().getName());
 		}
 
 		OopHandle handle = fromBottom.addOffsetToAsOopHandle(0);
@@ -76,12 +91,12 @@ public class HistogramHeapAccessor {
 			if (obj == null) {
 				throw new UnknownOopException();
 			}
+			
 			long objectSize = obj.getObjectSize();
-
+			handle = handle.addOffsetToAsOopHandle(objectSize);
+			
 			Klass klass = obj.getKlass();
-
 			if (klass == null || obj.getMark().age() < minAge) {
-				handle = handle.addOffsetToAsOopHandle(objectSize);
 				continue;
 			}
 
@@ -90,29 +105,34 @@ public class HistogramHeapAccessor {
 			stats.survivorSize += objectSize;
 
 			if ((processingObject++) == PROCERSSING_DOT_SIZE) {
-				System.err.print('.');
+				tty.print('.');
 				processingObject = 0;
 			}
-			handle = handle.addOffsetToAsOopHandle(objectSize);
 		}
 
 		return getClassStatsList();
 	}
 
+	/**
+	 * 统计CMS OldGen的对象信息
+	 */
 	public List<ClassStats> dumpCms() {
 		if (!(heap instanceof GenCollectedHeap)) {
-			throw new RuntimeException("Unsupport heap:" + heap.getClass().getName());
+			throw new IllegalArgumentException("Only Support CMS GC. Unsupport heap:" + heap.getClass().getName());
 		}
 
 		ConcurrentMarkSweepGeneration cmsGen = (ConcurrentMarkSweepGeneration) ((GenCollectedHeap) heap).getGen(1);
-		CompactibleFreeListSpace cmsSpaceOld = cmsGen.cmsSpace();
-		CMSCollector collector = cmsSpaceOld.collector();
-		System.err.println("Getting live regions.");
+		CompactibleFreeListSpace cmsSpace = cmsGen.cmsSpace();
+		CMSCollector cmsCollector = cmsSpace.collector();
+		
+		cmsGen.printOn(tty);
+		tty.println("");
+		
+		tty.println("Getting live regions.");
 		long start = System.currentTimeMillis();
-		List liveRegions = cmsSpaceOld.getLiveRegions();
+		List liveRegions = cmsSpace.getLiveRegions();
 		int liveRegionsSize = liveRegions.size();
-
-		System.err.printf("OldGen has %d live regions, took %.1fs. %n", liveRegionsSize,
+		tty.printf("OldGen has %d live regions, took %.1fs. %n", liveRegionsSize,
 				(System.currentTimeMillis() - start) / 1000d);
 
 		int processingObject = 0;
@@ -134,7 +154,7 @@ public class HistogramHeapAccessor {
 					}
 
 					if (obj == null) {
-						long size = collector.blockSizeUsingPrintezisBits(handle);
+						long size = cmsCollector.blockSizeUsingPrintezisBits(handle);
 						if (size <= 0L) {
 							throw new UnknownOopException();
 						}
@@ -142,7 +162,7 @@ public class HistogramHeapAccessor {
 						handle = handle.addOffsetToAsOopHandle(CompactibleFreeListSpace.adjustObjectSizeInBytes(size));
 						continue;
 					}
-					
+
 					long objectSize = obj.getObjectSize();
 
 					Klass klass = obj.getKlass();
@@ -151,20 +171,19 @@ public class HistogramHeapAccessor {
 								.addOffsetToAsOopHandle(CompactibleFreeListSpace.adjustObjectSizeInBytes(objectSize));
 						continue;
 					}
-					
+
 					ClassStats stats = getClassStats(klass);
 
 					stats.oldCount++;
 					stats.oldSize += objectSize;
 
 					if ((processingObject++) == PROCERSSING_DOT_SIZE) {
-						System.err.print(".");
+						tty.print(".");
 						processingObject = 0;
 					}
 
 					handle = handle
 							.addOffsetToAsOopHandle(CompactibleFreeListSpace.adjustObjectSizeInBytes(objectSize));
-
 				}
 			} catch (AddressException e) {
 			} catch (UnknownOopException e) {
@@ -172,6 +191,26 @@ public class HistogramHeapAccessor {
 		}
 
 		return getClassStatsList();
+	}
+
+	public void printHeapAddress() {
+		if (heap instanceof GenCollectedHeap) {
+			// CMS GC
+			DefNewGeneration youngGen = (DefNewGeneration) ((GenCollectedHeap) heap).getGen(0);
+			youngGen.printOn(tty);
+			tty.println("");
+			ConcurrentMarkSweepGeneration cmsGen = (ConcurrentMarkSweepGeneration) ((GenCollectedHeap) heap).getGen(1);
+			cmsGen.printOn(tty);
+		} else if (heap instanceof ParallelScavengeHeap) {
+			// Parallel GC
+			PSYoungGen psYoung = ((ParallelScavengeHeap) heap).youngGen();
+			psYoung.printOn(tty);
+			tty.println("");
+			PSOldGen oldgen = ((ParallelScavengeHeap) heap).oldGen();
+			oldgen.printOn(tty);
+		} else {
+			throw new IllegalArgumentException("Unsupport heap:" + heap.getClass().getName());
+		}
 	}
 
 	private List<ClassStats> getClassStatsList() {
